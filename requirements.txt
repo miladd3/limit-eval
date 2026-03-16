@@ -1,0 +1,8 @@
+arize-phoenix[evals]
+openinference-instrumentation-openai-agents
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+openai-agents>=0.10.3
+httpx>=0.27.0
+python-dotenv>=1.2.2
+pandas
