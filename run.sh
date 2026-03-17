@@ -56,7 +56,7 @@ wait_for_port() {
 # 1. Start limit-api
 if ! curl -sf "http://127.0.0.1:$API_PORT/accounts" > /dev/null 2>&1; then
   echo "Starting limit-api on :$API_PORT..."
-  (cd "$API_DIR" && source .venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port $API_PORT > /tmp/limit-api.log 2>&1) &
+  ("$API_DIR/.venv/bin/uvicorn" main:app --host 0.0.0.0 --port $API_PORT --app-dir "$API_DIR" > /tmp/limit-api.log 2>&1) &
   PIDS+=($!)
   wait_for_http "http://127.0.0.1:$API_PORT/accounts" "limit-api"
 else
@@ -66,21 +66,20 @@ fi
 # 2. Start limit-mcp
 if ! nc -z 127.0.0.1 $MCP_PORT > /dev/null 2>&1; then
   echo "Starting limit-mcp on :$MCP_PORT..."
-  (cd "$MCP_DIR" && source .venv/bin/activate && python fastmcp_server.py > /tmp/limit-mcp.log 2>&1) &
+  (cd "$MCP_DIR" && "$MCP_DIR/.venv/bin/python" fastmcp_server.py > /tmp/limit-mcp.log 2>&1) &
   PIDS+=($!)
   wait_for_port "127.0.0.1" "$MCP_PORT" "limit-mcp"
 else
   echo "limit-mcp already running."
 fi
 
-# 3. Start Phoenix
+# 3. Check Phoenix (managed separately — use ./phoenix.sh start/stop)
 if ! curl -sf "http://127.0.0.1:$PHOENIX_PORT" > /dev/null 2>&1; then
-  echo "Starting Phoenix on :$PHOENIX_PORT..."
-  (cd "$EVAL_DIR" && source .venv/bin/activate && python -m phoenix.server.main serve > /tmp/phoenix.log 2>&1) &
-  PIDS+=($!)
-  wait_for_http "http://127.0.0.1:$PHOENIX_PORT" "Phoenix"
+  echo "ERROR: Phoenix is not running on :$PHOENIX_PORT"
+  echo "Start it first:  ./phoenix.sh start"
+  exit 1
 else
-  echo "Phoenix already running."
+  echo "Phoenix is running."
 fi
 
 echo ""
@@ -89,5 +88,4 @@ echo ""
 
 # 4. Run eval
 cd "$EVAL_DIR"
-source .venv/bin/activate
-python eval.py "$@"
+"$EVAL_DIR/.venv/bin/python" eval.py "$@"
