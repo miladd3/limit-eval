@@ -11,19 +11,29 @@ Prerequisites:
 
 import asyncio
 import os
-import sys
 from pathlib import Path
-from typing import Any, Optional
-
-import httpx
 import pandas as pd
-from agents import Agent, Runner, SQLiteSession, function_tool, gen_trace_id, trace
+from agents import Agent, Runner, SQLiteSession, gen_trace_id, trace
 from agents.mcp import MCPServerStreamableHttp
 from dotenv import load_dotenv
 from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk import trace as trace_sdk
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+# ── Import real agent modules ────────────────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+import importlib.util
+
+def _load_module(name: str, filepath: Path):
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+tools_agent_mod = _load_module("tools_agent", PROJECT_ROOT / "limit-agent-using-tools" / "agent.py")
+mcp_agent_mod = _load_module("mcp_agent", PROJECT_ROOT / "limit-agent-using-mcp" / "agent.py")
 
 load_dotenv()
 
@@ -43,11 +53,6 @@ LIMIT_API_BASE_URL = os.getenv("LIMIT_API_BASE_URL", "http://127.0.0.1:2010")
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:2009/mcp")
 
 os.environ.setdefault("OPENAI_API_KEY", os.environ["OPENAI_API_KEY"])
-
-# ── Shared system prompt ────────────────────────────────────────────────────────
-SYSTEM_INSTRUCTIONS = """You are a helpful banking assistant that helps users manage
-their debit card limits for POS (payment), ATM (withdrawal), and E-commerce transactions.
-Use only your tools as the source of truth. Never hardcode values."""
 
 # ── Test dataset ────────────────────────────────────────────────────────────────
 TEST_CASES = [
@@ -77,50 +82,19 @@ Respond with exactly one word: correct, partial, or incorrect.
 """
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────────
-class LimitApiClient:
-    def __init__(self, base_url: str, timeout: int = 15) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
-
-    async def request(self, method: str, path: str, payload: Optional[dict] = None) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            try:
-                r = await client.request(method, f"{self._base_url}{path}", json=payload)
-                r.raise_for_status()
-                return r.json()
-            except Exception as exc:
-                return {"error": str(exc)}
-
-
-def build_tools(client: LimitApiClient):
-    @function_tool
-    async def get_payment_instruments() -> dict[str, Any]:
-        """Fetch all accounts and cards with current limits."""
-        return await client.request("GET", "/accounts")
-
-    @function_tool
-    async def get_current_limits(card_id: str) -> dict[str, Any]:
-        """Get current limits for a specific card."""
-        return await client.request("GET", f"/cards/{card_id}/limits")
-
-    @function_tool
-    async def get_default_card_limits() -> dict[str, Any]:
-        """Get current limits for the default card."""
-        return await client.request("GET", "/cards/default/limits")
-
-    return [get_payment_instruments, get_current_limits, get_default_card_limits]
-
-
-# ── Agent runners ─────────────────────────────────────────────────────────────────
+# ── Agent runners (using real agent modules) ─────────────────────────────────────
 async def run_tools_agent(prompt: str) -> str:
-    """Run limit-agent-tools and return final output."""
-    client = LimitApiClient(LIMIT_API_BASE_URL)
+    """Run limit-agent-tools with real system instructions and all 5 tools."""
+    client = tools_agent_mod.LimitApiClient(
+        base_url=LIMIT_API_BASE_URL,
+        timeout_seconds=int(os.getenv("LIMIT_API_TIMEOUT", "15")),
+    )
+    tools = tools_agent_mod.build_tools(client)
     agent = Agent(
         name="Debit Card Limit Assistant (Tools)",
-        instructions=SYSTEM_INSTRUCTIONS,
+        instructions=tools_agent_mod.SYSTEM_INSTRUCTIONS,
         model=OPENAI_MODEL,
-        tools=build_tools(client),
+        tools=tools,
     )
     session = SQLiteSession(session_id=f"eval-tools-{prompt[:20].replace(' ', '_')}")
     with trace(workflow_name="eval:limit-agent-tools"):
@@ -129,16 +103,25 @@ async def run_tools_agent(prompt: str) -> str:
 
 
 async def run_mcp_agent(prompt: str) -> str:
-    """Run limit-agent-mcp and return final output."""
+    """Run limit-agent-mcp with real system instructions and MCP config."""
+    mcp_timeout = int(os.getenv("MCP_TIMEOUT", "15"))
+    mcp_sse_read_timeout = int(os.getenv("MCP_SSE_READ_TIMEOUT", "300"))
     async with MCPServerStreamableHttp(
-        name="card_limit_manager",
-        params={"url": MCP_SERVER_URL, "timeout": 15, "sse_read_timeout": 60},
+        name=os.getenv("MCP_SERVER_LABEL", "card_limit_manager"),
+        params={
+            "url": MCP_SERVER_URL,
+            "timeout": mcp_timeout,
+            "sse_read_timeout": mcp_sse_read_timeout,
+        },
         require_approval="never",
         cache_tools_list=True,
+        max_retry_attempts=2,
+        retry_backoff_seconds_base=2.0,
+        client_session_timeout_seconds=mcp_timeout,
     ) as server:
         agent = Agent(
             name="Debit Card Limit Assistant (MCP)",
-            instructions=SYSTEM_INSTRUCTIONS,
+            instructions=mcp_agent_mod.SYSTEM_INSTRUCTIONS,
             model=OPENAI_MODEL,
             mcp_servers=[server],
         )
