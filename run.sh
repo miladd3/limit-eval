@@ -56,7 +56,7 @@ wait_for_port() {
 # 1. Start limit-api
 if ! curl -sf "http://127.0.0.1:$API_PORT/accounts" > /dev/null 2>&1; then
   echo "Starting limit-api on :$API_PORT..."
-  ("$API_DIR/.venv/bin/uvicorn" main:app --host 0.0.0.0 --port $API_PORT --app-dir "$API_DIR" > /tmp/limit-api.log 2>&1) &
+  ("$API_DIR/.venv/bin/python" -m uvicorn main:app --host 0.0.0.0 --port $API_PORT --app-dir "$API_DIR" > /tmp/limit-api.log 2>&1) &
   PIDS+=($!)
   wait_for_http "http://127.0.0.1:$API_PORT/accounts" "limit-api"
 else
