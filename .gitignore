@@ -42,3 +42,4 @@ ENV/
 
 # Phoenix / OpenTelemetry local storage
 phoenix_storage/
+.phoenix.pid
