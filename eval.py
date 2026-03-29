@@ -13,10 +13,10 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from config import DEFAULT_RESULTS_PATH, DEFAULT_TEST_CASES_PATH, PHOENIX_ENDPOINT
-from judge import print_summary, run_case_evals, run_turn_evals
-from models import load_test_cases
-from runner import collect_results
+from src.config import DEFAULT_RESULTS_PATH, DEFAULT_TEST_CASES_PATH, PHOENIX_ENDPOINT
+from src.judge import print_summary, run_case_evals, run_turn_evals
+from src.models import load_test_cases
+from src.runner import collect_results
 
 
 def parse_args() -> argparse.Namespace:

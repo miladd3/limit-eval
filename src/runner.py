@@ -3,9 +3,9 @@ from typing import Any
 import pandas as pd
 from agents import Agent, Runner, SQLiteSession, trace
 
-from agents_module import build_mcp_agent, build_tools_agent
-from config import RUN_ID
-from models import (
+from src.agents_module import build_mcp_agent, build_tools_agent
+from src.config import RUN_ID
+from src.models import (
     EvalCase,
     EvalCaseRun,
     format_case_objectives,

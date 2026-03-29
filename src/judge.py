@@ -1,8 +1,8 @@
 import pandas as pd
 from phoenix.evals import OpenAIModel, llm_classify
 
-from config import JUDGE_CONCURRENCY, JUDGE_MODEL, OPENAI_API_KEY
-from templates import CONVERSATION_EVAL_TEMPLATE, EVAL_TEMPLATE, PAIRWISE_EVAL_TEMPLATE
+from src.config import JUDGE_CONCURRENCY, JUDGE_MODEL, OPENAI_API_KEY
+from src.templates import CONVERSATION_EVAL_TEMPLATE, EVAL_TEMPLATE, PAIRWISE_EVAL_TEMPLATE
 
 
 def run_turn_evals(df: pd.DataFrame) -> pd.DataFrame:

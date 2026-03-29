@@ -11,9 +11,10 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_TEST_CASES_PATH = Path(__file__).resolve().parent / "test_cases.json"
-DEFAULT_RESULTS_PATH = Path(__file__).resolve().parent / "results.csv"
+EVAL_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = EVAL_DIR.parent
+DEFAULT_TEST_CASES_PATH = EVAL_DIR / "test_cases.json"
+DEFAULT_RESULTS_PATH = EVAL_DIR / "results.csv"
 RUN_ID = uuid4().hex[:8]
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

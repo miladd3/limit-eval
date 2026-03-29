@@ -5,7 +5,7 @@ from typing import AsyncIterator
 from agents import Agent
 from agents.mcp import MCPServerStreamableHttp
 
-from config import (
+from src.config import (
     LIMIT_API_BASE_URL,
     MCP_SERVER_URL,
     OPENAI_MODEL,
