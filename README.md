@@ -4,10 +4,11 @@ Evaluation harness that compares two debit card limit agents — `limit-agent-to
 
 ## How it works
 
-1. Both agents run against the same set of test prompts
-2. Each agent's response is judged by a separate LLM (`gpt-4.1`) using a structured eval template
-3. Traces are sent to Phoenix for deep inspection
-4. Results are printed to stdout and saved to `results.csv`
+1. Both agents run against the same JSON-defined test cases
+2. Each test case can contain one or more conversation turns
+3. Each agent response is judged by a separate LLM (`gpt-4.1`) using a structured eval template
+4. Traces are sent to Phoenix for deep inspection
+5. Results are printed to stdout and saved to `results.csv`
 
 ## Prerequisites
 
@@ -47,6 +48,9 @@ cd ~/projects/limit-agent-mcp && ./run.sh
 # Terminal 3 — run the eval
 source .venv/bin/activate
 python eval.py
+
+# Or point at a different JSON dataset
+python eval.py --test-cases ./test_cases.json --output ./results.csv
 ```
 
 Open [http://localhost:6006](http://localhost:6006) to inspect traces in the Phoenix UI.
@@ -58,15 +62,50 @@ Open [http://localhost:6006](http://localhost:6006) to inspect traces in the Pho
 | `OPENAI_API_KEY` | — | Required |
 | `OPENAI_MODEL` | `gpt-4.1` | Model used by both agents |
 | `JUDGE_MODEL` | `gpt-4.1` | Model used as LLM judge |
+| `JUDGE_CONCURRENCY` | `8` | Parallelism for Phoenix `llm_classify` |
 | `LIMIT_API_BASE_URL` | `http://127.0.0.1:2010` | limit-api base URL |
 | `MCP_SERVER_URL` | `http://127.0.0.1:2009/mcp` | MCP server URL |
 | `PHOENIX_COLLECTOR_ENDPOINT` | `http://localhost:6006` | Phoenix OTLP endpoint |
+
+## Test case format
+
+`eval.py` now loads cases from `test_cases.json` by default. The file can be either:
+
+- a top-level array of cases
+- or an object with a `test_cases` array
+
+Each case must include `turns`, and each turn can be either a plain string or an object:
+
+```json
+{
+	"id": "follow-up-atm-limit",
+	"description": "Multi-turn follow-up that depends on prior context",
+	"turns": [
+		{
+			"user": "Show my current card limits",
+			"evaluation_focus": "The response should establish card and limit context."
+		},
+		{
+			"user": "What is my ATM withdrawal limit?",
+			"expected_outcome": "The assistant should answer using the already established context."
+		}
+	]
+}
+```
+
+Notes:
+
+- A shared agent session is reused across turns within each case.
+- Each turn is judged independently, but the judge receives the prior conversation history.
+- `evaluation_focus` and `expected_outcome` are optional helpers for stronger multi-turn grading.
 
 ## Output
 
 After a run, results are printed to stdout and saved to `results.csv` with columns:
 
-- `input` — the test prompt
+- `case_id` / `turn_index` — identifies the evaluated turn
+- `conversation_history` — prior turns shown to the judge
+- `latest_user_input` — the current user turn
 - `tools_output` / `mcp_output` — agent responses
 - `tools_label` / `mcp_label` — judge verdict: `correct`, `partial`, or `incorrect`
 - `tools_explanation` / `mcp_explanation` — judge reasoning
@@ -85,6 +124,7 @@ After a run, results are printed to stdout and saved to `results.csv` with colum
 ```
 limit-eval/
 ├── eval.py             # main eval runner
+├── test_cases.json     # JSON dataset, supports multi-turn conversations
 ├── requirements.txt
 ├── .env.example
 ├── results.csv         # generated after first run
